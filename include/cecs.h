@@ -24,7 +24,6 @@ typedef struct {
 
 typedef struct {
     System system;
-    ProcessMode process_mode;
     u32 component_count;
     ComponentType* components;
 } SystemMask;
@@ -36,8 +35,14 @@ struct Registry {
     u32 component_count;
     Map component_pools;
 
-    u32 system_count;
-    Map system_masks;
+    u32 startup_system_count;
+    Map startup_system_masks;
+
+    u32 update_system_count;
+    Map update_system_masks;
+
+    u32 fixed_system_count;
+    Map fixed_system_masks;
 
     bool running;
     double fixed_delta;
@@ -79,7 +84,11 @@ bool registry_has_components(
         ComponentType* components
     );
 
-void registry_execute_systems(Registry* registry, ProcessMode process_mode, double delta);
+void registry_startup_systems(Registry* registry);
+
+void registry_update_systems(Registry* registry, double delta);
+
+void registry_fixed_systems(Registry* registry, double percentage);
 
 void registry_start(Registry* registry);
 
