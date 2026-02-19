@@ -4,7 +4,7 @@ LDFLAGS = -lm
 
 SRC = $(shell find src -name *.c)
 OBJ = $(patsubst src/%.c, out/%.o, $(SRC))
-TARGET = out/secs
+TARGET = out/cecs
 
 out/%.o: src/%.c
 	mkdir -p out
@@ -17,3 +17,6 @@ $(TARGET): $(OBJ)
 
 run: $(TARGET)
 	$(TARGET)
+
+test: $(TARGET)
+	valgrind --leak-check=full $(TARGET)
