@@ -12,17 +12,41 @@ typedef struct {
 ComponentType VELOCITY_TYPE;
 typedef Position Velocity;
 
+ComponentType COUNTER_TYPE;
+typedef u32 Counter;
+
 #define MOVEMENT_COMPONENTS \
-    NAME_TYPE, POSITION_TYPE, VELOCITY_TYPE
-void movement(Registry* registry, Entity entity) {
-    Name* name = registry_get_component(registry, entity, NAME_TYPE);
+    2, POSITION_TYPE, VELOCITY_TYPE
+void movement(Registry* registry, Entity entity, double delta) {
     Position* position = registry_get_component(registry, entity, POSITION_TYPE);
     Velocity* velocity = registry_get_component(registry, entity, VELOCITY_TYPE);
 
-    position->x += velocity->x;
-    position->y += velocity->y;
+    position->x += velocity->x * delta;
+    position->y += velocity->y * delta;
+}
 
-    printf("%s is now at %f, %f\n", *name, position->x, position->y);
+#define COUNT_COMPONENTS \
+    2, COUNTER_TYPE, POSITION_TYPE
+void count_system(Registry* registry, Entity entity, double delta) {
+    Counter* counter = registry_get_component(registry, entity, COUNTER_TYPE);
+    Position* position = registry_get_component(registry, entity, POSITION_TYPE);
+
+    (*counter)++;
+
+    printf("%d\n", *counter);
+    printf("%f, %f\n", position->x, position->y);
+
+    if (*counter >= 10) {
+        registry_stop(registry);
+    }
+}
+
+#define WELCOME_COMPONENTS \
+    1, NAME_TYPE
+void welcome(Registry* registry, Entity entity, double delta) {
+    Name* name = registry_get_component(registry, entity, NAME_TYPE);
+
+    printf("my name is %s\n", *name);
 }
 
 int main(void) {
@@ -30,22 +54,25 @@ int main(void) {
     registry_init(&registry);
 
     Name name = "Fred";
-    Position pos = {1.0f, 3.0f};
-    Velocity vel = {10.f, 3.0f};
+    Position pos = {0.0f, 0.0f};
+    Velocity vel = {1.f, 1.0f};
+    Counter count = 0;
 
     NAME_TYPE = registry_register_component(&registry, sizeof(Name));
     POSITION_TYPE = registry_register_component(&registry, sizeof(Position));
     VELOCITY_TYPE = registry_register_component(&registry, sizeof(Velocity));
+    COUNTER_TYPE = registry_register_component(&registry, sizeof(Counter));
 
     Entity person = registry_register_entity(&registry);
 
     registry_add_component(&registry, person, NAME_TYPE, &name);
     registry_add_component(&registry, person, POSITION_TYPE, &pos);
     registry_add_component(&registry, person, VELOCITY_TYPE, &vel);
+    registry_add_component(&registry, person, COUNTER_TYPE, &count);
 
-    registry_register_system(&registry, movement, 3, MOVEMENT_COMPONENTS);
+    registry_register_system(&registry, fixed_update, movement, MOVEMENT_COMPONENTS);
+    registry_register_system(&registry, fixed_update, count_system, COUNT_COMPONENTS);
+    registry_register_system(&registry, startup, welcome, WELCOME_COMPONENTS);
 
-    registry_execute_systems(&registry);
-
-    registry_clean(&registry);
+    registry_start(&registry);
 }

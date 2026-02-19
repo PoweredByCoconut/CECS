@@ -5,13 +5,17 @@
 #include "map.h"
 
 #define MAX_ENTITIES 100
-#define MAX_COMPONENTS 32
-#define MAX_SYSTEMS 100
 
 typedef struct Registry Registry;
 typedef u32 Entity;
 typedef u32 ComponentType;
-typedef void(*System)(Registry* registry, Entity entity);
+typedef void(*System)(Registry* registry, Entity entity, double delta);
+
+typedef enum {
+    startup,
+    fixed_update,
+    update
+} ProcessMode;
 
 typedef struct {
     u32 size;
@@ -20,19 +24,23 @@ typedef struct {
 
 typedef struct {
     System system;
-    u32 mask;
+    ProcessMode process_mode;
+    u32 component_count;
+    ComponentType* components;
 } SystemMask;
 
 struct Registry {
     u32 entity_count;
-    u32 component_masks[MAX_ENTITIES]; // TODO: make this use a component_mask struct to increase max component count
+    Map component_masks;
 
     u32 component_count;
     Map component_pools;
 
     u32 system_count;
-    //SystemMask system_masks[MAX_SYSTEMS]; // TODO: hashmap here too
     Map system_masks;
+
+    bool running;
+    double fixed_delta;
 };
 
 void registry_init(Registry* registry);
@@ -45,6 +53,7 @@ Entity registry_register_entity(Registry *registry);
 
 void registry_register_system(
         Registry* registry,
+        ProcessMode process_mode,
         System system,
         int component_count, 
         ...
@@ -66,9 +75,16 @@ void* registry_get_component(
 bool registry_has_components(
         Registry* registry,
         Entity entity,
-        u32 mask
+        u32 num_components,
+        ComponentType* components
     );
 
-void registry_execute_systems(Registry* registry);
+void registry_execute_systems(Registry* registry, ProcessMode process_mode, double delta);
+
+void registry_start(Registry* registry);
+
+void registry_stop(Registry* registry);
+
+double current_time_secs(void);
 
 #endif

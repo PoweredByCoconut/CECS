@@ -47,6 +47,25 @@ void map_clean(Map* map) {
     free(map->data);
 }
 
+void map_grow(Map* map) {
+    Map new_map = {0};
+    map_init(&new_map, map->data_size, map->capacity * 2);
+
+    u32 stride = sizeof(MapData) + map->data_size;
+
+    for (int i = 0; i < stride * map->capacity; i += stride) {
+        MapData* map_data = (MapData*)((u8*)map->data + i);
+        while (map_data && map_data->set) {
+            map_set(&new_map, map_data->key, map_data + 1);
+            map_data = map_data->next;
+        }
+    }
+
+    map_clean(map);
+
+    *map = new_map;
+}
+
 MapData* map_add(Map* map, u32 key) {
     MapData* map_data = map_get_data_address(map, key);
 
@@ -66,18 +85,13 @@ MapData* map_add(Map* map, u32 key) {
         map_data = map_data->next;
     }
 
-    (*map_data) = (MapData) {
+    *map_data = (MapData) {
         .key = key,
         .next = NULL,
         .set = true,
     };
 
     map->length++;
-
-    if (map->length > map->capacity * 4 / 5) {
-        // TODO: grow map
-        printf("map should grow\n");
-    }
 
     return map_data;
 }
@@ -90,6 +104,10 @@ void map_set(Map* map, u32 key, void* data) {
     void* dest = map_data + 1;
 
     memcpy(dest, data, map->data_size);
+
+    if (map->length > map->capacity * 4 / 5) {
+        map_grow(map);
+    }
 }
 
 void* map_get(Map* map, u32 key) {
@@ -97,7 +115,6 @@ void* map_get(Map* map, u32 key) {
 
     while (map_data->key != key) {
         if (!map_data->next) {
-            fprintf(stderr, "Key %d is not in map\n", key);
             return NULL;
         }
         map_data = map_data->next;
