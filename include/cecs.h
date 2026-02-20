@@ -48,7 +48,7 @@ struct Registry {
     double fixed_delta;
 };
 
-void registry_init(Registry* registry);
+Registry* registry_init(Registry* registry);
 
 void registry_clean(Registry* registry);
 

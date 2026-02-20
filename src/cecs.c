@@ -6,7 +6,14 @@
 #include <string.h>
 #include <sys/time.h>
 
-void registry_init(Registry* registry) {
+Registry* registry_init(Registry* registry) {
+    if (!registry) {
+        registry = calloc(1, sizeof(Registry));
+        if (!registry) {
+            fprintf(stderr, "Failed to allocate registry\n");
+        }
+    }
+
     registry->entity_count = 0;
     registry->component_count = 0;
     registry->running = false;
@@ -21,6 +28,8 @@ void registry_init(Registry* registry) {
     map_init(&registry->fixed_system_masks, sizeof(SystemMask), 4);
 
     map_init(&registry->component_masks, sizeof(Map), 4);
+
+    return registry;
 }
 
 void registry_clean(Registry * registry) {
@@ -161,13 +170,13 @@ void registry_startup_systems(Registry* registry) {
     }
 }
 
-void registry_update_systems(Registry* registry, double delta) {
+void registry_update_systems(Registry* registry, double progress) {
     for (int i = 0; i < registry->update_system_count; i++) {
         SystemMask* system_mask = map_get(&registry->update_system_masks, i);
 
         for (Entity entity = 0; entity < registry->entity_count; entity++) {
             if (registry_has_components(registry, entity, system_mask->component_count, system_mask->components)) {
-                system_mask->system(registry, entity, delta);
+                system_mask->system(registry, entity, progress);
             }
         }
     }

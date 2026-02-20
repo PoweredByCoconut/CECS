@@ -1,8 +1,6 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include "cecs.h"
-
-ComponentType NAME_TYPE;
-typedef char Name[8];
 
 ComponentType POSITION_TYPE;
 typedef struct {
@@ -13,11 +11,11 @@ ComponentType VELOCITY_TYPE;
 typedef Position Velocity;
 
 ComponentType COUNTER_TYPE;
-typedef u32 Counter;
+typedef double Counter;
 
 #define MOVEMENT_COMPONENTS \
     2, POSITION_TYPE, VELOCITY_TYPE
-void movement(Registry* registry, Entity entity, double delta) {
+void movement_system(Registry* registry, Entity entity, double delta) {
     Position* position = registry_get_component(registry, entity, POSITION_TYPE);
     Velocity* velocity = registry_get_component(registry, entity, VELOCITY_TYPE);
 
@@ -25,54 +23,53 @@ void movement(Registry* registry, Entity entity, double delta) {
     position->y += velocity->y * delta;
 }
 
+#define RENDER_COMPONENTS \
+    2, POSITION_TYPE, VELOCITY_TYPE
+void render_system(Registry* registry, Entity entity, double progress) {
+    Position* real_position = registry_get_component(registry, entity, POSITION_TYPE);
+    Velocity* velocity = registry_get_component(registry, entity, VELOCITY_TYPE);
+
+    Position interpolate = {0};
+    interpolate.x = real_position->x + progress * velocity->x;
+    interpolate.y = real_position->y + progress * velocity->y;
+
+    printf("%f, %f\n", interpolate.x, interpolate.y);
+}
+
 #define COUNT_COMPONENTS \
-    2, COUNTER_TYPE, POSITION_TYPE
+    1, COUNTER_TYPE
 void count_system(Registry* registry, Entity entity, double delta) {
     Counter* counter = registry_get_component(registry, entity, COUNTER_TYPE);
-    Position* position = registry_get_component(registry, entity, POSITION_TYPE);
-
-    (*counter)++;
-
-    printf("%d\n", *counter);
-    printf("%f, %f\n", position->x, position->y);
-
+    (*counter) += delta;
     if (*counter >= 10) {
         registry_stop(registry);
     }
 }
 
-#define WELCOME_COMPONENTS \
-    1, NAME_TYPE
-void welcome(Registry* registry, Entity entity, double delta) {
-    Name* name = registry_get_component(registry, entity, NAME_TYPE);
+void spawn_object(Registry* registry, Position position, Velocity velocity) {
+    Entity object = registry_register_entity(registry);
 
-    printf("my name is %s\n", *name);
+    registry_add_component(registry, object, POSITION_TYPE, &position);
+    registry_add_component(registry, object, VELOCITY_TYPE, &velocity);
 }
 
 int main(void) {
-    Registry registry = {0};
-    registry_init(&registry);
+    Registry* registry = registry_init(NULL);
 
-    Name name = "Fred";
-    Position pos = {0.0f, 0.0f};
-    Velocity vel = {1.f, 1.0f};
-    Counter count = 0;
+    POSITION_TYPE = registry_register_component(registry, sizeof(Position));
+    VELOCITY_TYPE = registry_register_component(registry, sizeof(Velocity));
+    COUNTER_TYPE = registry_register_component(registry, sizeof(Counter));
 
-    NAME_TYPE = registry_register_component(&registry, sizeof(Name));
-    POSITION_TYPE = registry_register_component(&registry, sizeof(Position));
-    VELOCITY_TYPE = registry_register_component(&registry, sizeof(Velocity));
-    COUNTER_TYPE = registry_register_component(&registry, sizeof(Counter));
+    registry_register_system(registry, fixed_update, movement_system, MOVEMENT_COMPONENTS);
+    registry_register_system(registry, update, render_system, RENDER_COMPONENTS);
+    registry_register_system(registry, fixed_update, count_system, COUNT_COMPONENTS);
 
-    Entity person = registry_register_entity(&registry);
+    spawn_object(registry, (Position){0.0f, 0.0f}, (Velocity){1.0f, 1.0f});
 
-    registry_add_component(&registry, person, NAME_TYPE, &name);
-    registry_add_component(&registry, person, POSITION_TYPE, &pos);
-    registry_add_component(&registry, person, VELOCITY_TYPE, &vel);
-    registry_add_component(&registry, person, COUNTER_TYPE, &count);
+    Entity counter = registry_register_entity(registry);
+    Counter counter_data = 0;
+    registry_add_component(registry, counter, COUNTER_TYPE, &counter_data);
 
-    registry_register_system(&registry, fixed_update, movement, MOVEMENT_COMPONENTS);
-    registry_register_system(&registry, fixed_update, count_system, COUNT_COMPONENTS);
-    registry_register_system(&registry, startup, welcome, WELCOME_COMPONENTS);
-
-    registry_start(&registry);
+    registry_start(registry);
+    free(registry);
 }
