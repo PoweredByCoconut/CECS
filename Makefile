@@ -1,6 +1,6 @@
 CC = clang
 CFLAGS = -Iinclude -Wall -Wpedantic
-LDFLAGS = -lm
+LDFLAGS = -lm -lncurses
 
 SRC = $(shell find src -name *.c)
 OBJ = $(patsubst src/%.c, out/%.o, $(SRC))

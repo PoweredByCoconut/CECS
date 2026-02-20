@@ -90,6 +90,8 @@ void registry_update_systems(Registry* registry, double delta);
 
 void registry_fixed_systems(Registry* registry, double percentage);
 
+void registry_set_fixed_delta(Registry* registry, double fixed_delta);
+
 void registry_start(Registry* registry);
 
 void registry_stop(Registry* registry);
