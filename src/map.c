@@ -113,6 +113,10 @@ void map_set(Map* map, u32 key, void* data) {
 void* map_get(Map* map, u32 key) {
     MapData* map_data = map_get_data_address(map, key);
 
+    if (!map_data->set) {
+        return NULL;
+    }
+
     while (map_data->key != key) {
         if (!map_data->next) {
             return NULL;

@@ -1,156 +1,82 @@
 #include "cecs.h"
 #include "map.h"
+#include <bits/time.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/time.h>
 
-Registry* registry_init(Registry* registry) {
-    if (!registry) {
-        registry = calloc(1, sizeof(Registry));
-        if (!registry) {
-            fprintf(stderr, "Failed to allocate registry\n");
+App* app_init(App* app) {
+    if (!app) {
+        app = calloc(sizeof(App), 1);
+        if (!app) {
+            fprintf(stderr, "failed to allocate app\n");
+            return NULL;
         }
     }
 
-    registry->entity_count = 0;
-    registry->component_count = 0;
-    registry->running = false;
-    registry->fixed_delta = 1.0;
-    registry->startup_system_count = 0;
-    registry->update_system_count = 0;
-    registry->fixed_system_count = 0;
+    app->entity_count = 0;
+    app->running = false;
+    app->fixed_delta = 1.0;
 
-    map_init(&registry->component_pools, sizeof(ComponentPool), 4);
-    map_init(&registry->startup_system_masks, sizeof(SystemMask), 4);
-    map_init(&registry->update_system_masks, sizeof(SystemMask), 4);
-    map_init(&registry->fixed_system_masks, sizeof(SystemMask), 4);
+    list_init(&app->entity_components, sizeof(Map), 4);
+    list_init(&app->startup_systems, sizeof(System), 4);
+    list_init(&app->update_systems, sizeof(System), 4);
+    list_init(&app->fixed_systems, sizeof(System), 4);
 
-    map_init(&registry->component_masks, sizeof(Map), 4);
-
-    return registry;
+    return app;
 }
 
-void registry_clean(Registry * registry) {
-    for (int i = 0; i < registry->component_count; i++) {
-        map_clean(&((ComponentPool*)map_get(&registry->component_pools, i))->data);
-    }
-    for (int i = 0; i < registry->entity_count; i++) {
-        map_clean(map_get(&registry->component_masks, i));
+void app_cleanup(App* app) {
+    // clean up maps
+    for (int i = 0; i < app->entity_components.length; i++) {
+        map_clean(list_get(&app->entity_components, i));
     }
 
-    for (int i = 0; i < registry->startup_system_count; i++) {
-        free(((SystemMask*)map_get(&registry->startup_system_masks, i))->components);
+    // clean up systems
+    for (int i = 0; i < app->startup_systems.length; i++) {
+        free(((System*)list_get(&app->startup_systems, i))->mask);
     }
-    for (int i = 0; i < registry->update_system_count; i++) {
-        free(((SystemMask*)map_get(&registry->update_system_masks, i))->components);
+    for (int i = 0; i < app->update_systems.length; i++) {
+        free(((System*)list_get(&app->update_systems, i))->mask);
     }
-    for (int i = 0; i < registry->fixed_system_count; i++) {
-        free(((SystemMask*)map_get(&registry->fixed_system_masks, i))->components);
+    for (int i = 0; i < app->fixed_systems.length; i++) {
+        free(((System*)list_get(&app->fixed_systems, i))->mask);
     }
-    map_clean(&registry->component_pools);
-    map_clean(&registry->component_masks);
-    map_clean(&registry->startup_system_masks);
-    map_clean(&registry->update_system_masks);
-    map_clean(&registry->fixed_system_masks);
+
+    // clean up lists
+    list_clean(&app->entity_components);
+    list_clean(&app->startup_systems);
+    list_clean(&app->update_systems);
+    list_clean(&app->fixed_systems);
 }
 
-ComponentType registry_register_component(Registry *registry, u32 size) {
-    ComponentType id = registry->component_count++;
+Entity app_add_entity(App* app) {
+    return app->entity_count++;
+}
 
-    map_add(&registry->component_pools, id);
-    ComponentPool* pool = map_get(&registry->component_pools, id);
-    pool->size = size;
-    map_init(&pool->data, size, 4);
+ComponentID app_register_component(App* app, u32 component_size) {
+    ComponentID id = app->entity_components.length;
+
+    Map* component_map = list_add(&app->entity_components, NULL);
+    map_init(component_map, component_size, 4);
 
     return id;
 }
 
-Entity registry_register_entity(Registry *registry) {
-    Entity id = registry->entity_count++;
-    
-    map_add(&registry->component_masks, id);
-    map_init(map_get(&registry->component_masks, id), sizeof(bool), 4);
-
-    return id;
+void app_set_entity_component(App* app, Entity entity, ComponentID component_id, void* data) {
+    Map* component_map = list_get(&app->entity_components, component_id);
+    map_set(component_map, entity, data);
 }
 
-void registry_register_system(Registry* registry, ProcessMode process_mode, System system, int component_count, ...) {
-    u32* system_count;
-    Map* system_masks;
+void* app_get_entity_component(App* app, Entity entity, ComponentID component_id) {
+    return map_get(list_get(&app->entity_components, component_id), entity);
+}
 
-    switch (process_mode) {
-        case update:
-            system_count = &registry->update_system_count;
-            system_masks = &registry->update_system_masks;
-            break;
-        case fixed_update:
-            system_count = &registry->fixed_system_count;
-            system_masks = &registry->fixed_system_masks;
-            break;
-        default:
-            system_count = &registry->startup_system_count;
-            system_masks = &registry->startup_system_masks;
-            break;
-    }
-
-    u32 system_id = (*system_count)++;
-
-    SystemMask system_mask = {0};
-    system_mask.system = system;
-    system_mask.component_count = component_count;
-    system_mask.components = calloc(sizeof(ComponentType), component_count);
-
-    va_list args;
-    va_start(args, component_count);
-
+bool app_entity_has_components(App* app, Entity entity, u32 component_count, ComponentID* components) {
     for (int i = 0; i < component_count; i++) {
-        system_mask.components[i] = va_arg(args, ComponentType);
-    }
-
-    va_end(args);
-
-    map_set(system_masks, system_id, &system_mask);
-}
-
-
-void registry_add_component(
-        Registry* registry,
-        Entity entity,
-        ComponentType component,
-        void* data
-    ) {
-    ComponentPool* pool = map_get(&registry->component_pools, component);
-
-    map_set(&pool->data, entity, data);
-
-    bool set = true;
-    map_set(map_get(&registry->component_masks, entity), component, &set);
-}
-
-void* registry_get_component(
-        Registry* registry,
-        Entity entity,
-        ComponentType component
-    ) {
-    if (!*(bool*)map_get(map_get(&registry->component_masks, entity), component)) {
-        return NULL;
-    }
-
-    ComponentPool* pool = map_get(&registry->component_pools, component);
-    return map_get(&pool->data, entity);
-}
-
-bool registry_has_components(
-        Registry* registry,
-        Entity entity,
-        u32 num_components,
-        ComponentType* components
-    ) {
-    for (int i = 0; i < num_components; i++) {
-        bool* has = map_get(map_get(&registry->component_masks, entity), components[i]);
-        if (!has || !*has) {
+        Map* component_map = list_get(&app->entity_components, i);
+        if (!map_get(component_map, entity)) {
             return false;
         }
     }
@@ -158,74 +84,71 @@ bool registry_has_components(
     return true;
 }
 
-void registry_startup_systems(Registry* registry) {
-    for (int i = 0; i < registry->startup_system_count; i++) {
-        SystemMask* system_mask = map_get(&registry->startup_system_masks, i);
+void app_register_system(App* app, SystemType type, SystemFunction function, u32 component_count, ...) {
+    System system = {0};
+    system.mask = calloc(component_count, sizeof(ComponentID));
+    if (!system.mask) {
+        fprintf(stderr, "Could not allocate memory for system mask\n");
+        return;
+    }
 
-        for (Entity entity = 0; entity < registry->entity_count; entity++) {
-            if (registry_has_components(registry, entity, system_mask->component_count, system_mask->components)) {
-                system_mask->system(registry, entity, 0.0);
+    va_list args;
+    va_start(args, component_count);
+
+    for (int i = 0; i < component_count; i++) {
+        system.mask[i] = va_arg(args, ComponentID);
+    }
+
+    va_end(args);
+
+    system.mask_length = component_count;
+    system.function = function;
+
+    List *systems;
+
+    switch (type) {
+        case STARTUP:
+            systems = &app->startup_systems;
+            break;
+        case UPDATE:
+            systems = &app->update_systems;
+            break;
+        case FIXED:
+            systems = &app->fixed_systems;
+            break;
+    }
+
+    list_add(systems, &system);
+}
+
+void app_execute_systems(App* app, SystemType type, double d) {
+    List* systems;
+
+    switch (type) {
+        case STARTUP:
+            systems = &app->startup_systems;
+            break;
+        case UPDATE:
+            systems = &app->update_systems;
+            break;
+        case FIXED:
+            systems = &app->fixed_systems;
+            break;
+    }
+
+    for (int i = 0; i < systems->length; i++) {
+        System* system = list_get(systems, i);
+
+        for (Entity e = 0; e < app->entity_count; e++) {
+            if (app_entity_has_components(app, e, system->mask_length, system->mask)) {
+                system->function(app, e, d);
             }
         }
     }
 }
 
-void registry_update_systems(Registry* registry, double progress) {
-    for (int i = 0; i < registry->update_system_count; i++) {
-        SystemMask* system_mask = map_get(&registry->update_system_masks, i);
-
-        for (Entity entity = 0; entity < registry->entity_count; entity++) {
-            if (registry_has_components(registry, entity, system_mask->component_count, system_mask->components)) {
-                system_mask->system(registry, entity, progress);
-            }
-        }
-    }
-}
-
-void registry_fixed_systems(Registry* registry, double delta) {
-    for (int i = 0; i < registry->fixed_system_count; i++) {
-        SystemMask* system_mask = map_get(&registry->fixed_system_masks, i);
-
-        for (Entity entity = 0; entity < registry->entity_count; entity++) {
-            if (registry_has_components(registry, entity, system_mask->component_count, system_mask->components)) {
-                system_mask->system(registry, entity, delta);
-            }
-        }
-    }
-}
-
-void registry_set_fixed_delta(Registry* registry, double fixed_delta) {
-    registry->fixed_delta = fixed_delta;
-}
-
-void registry_start(Registry* registry) {
-    registry->running = true;
-
-    registry_startup_systems(registry);
-
-    double last_time = current_time_secs();
-    double accumulator = 0.0;
-
-    while (registry->running) {
-        double current_time = current_time_secs();
-        double frame_time = current_time - last_time;
-        last_time = current_time;
-
-        accumulator += frame_time;
-
-        while (accumulator >= registry->fixed_delta) {
-            registry_fixed_systems(registry, registry->fixed_delta);
-            accumulator -= registry->fixed_delta;
-        }
-
-        registry_update_systems(registry, accumulator / registry->fixed_delta); 
-    }
-
-    registry_clean(registry);
-}
-
-void registry_stop(Registry* registry) {
-    registry->running = false;
+void app_set_fixed_delta(App* app, double fixed_delta) {
+    app->fixed_delta = fixed_delta;
 }
 
 double current_time_secs(void) {
@@ -233,4 +156,34 @@ double current_time_secs(void) {
     gettimeofday(&now, NULL);
 
     return now.tv_sec + now.tv_usec / 1000000.0;
+}
+
+void app_start(App* app) {
+    app->running = true;
+
+    app_execute_systems(app, STARTUP, 0.0);
+
+    double last_time = current_time_secs();
+    double accumulator = 0.0;
+
+    while (app->running) {
+        double current_time = current_time_secs();
+        double frame_time = current_time - last_time;
+        last_time = current_time;
+
+        accumulator += frame_time;
+
+        while (accumulator >= app->fixed_delta) {
+            app_execute_systems(app, FIXED, app->fixed_delta);
+            accumulator -= app->fixed_delta;
+        }
+
+        app_execute_systems(app, UPDATE, accumulator / app->fixed_delta); 
+    }
+
+    app_cleanup(app);
+}
+
+void app_stop(App* app) {
+    app->running = false;
 }

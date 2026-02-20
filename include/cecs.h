@@ -2,100 +2,66 @@
 #define CECS_H
 
 #include "types.h"
-#include "map.h"
+#include "list.h"
 
-#define MAX_ENTITIES 100
+typedef struct App App;
 
-typedef struct Registry Registry;
 typedef u32 Entity;
-typedef u32 ComponentType;
-typedef void(*System)(Registry* registry, Entity entity, double delta);
+typedef u32 ComponentID;
+typedef void(*SystemFunction)(App* app, Entity entity, double d);
+
+typedef struct {
+    ComponentID* mask;
+    u32 mask_length;
+    SystemFunction function;
+} System;
 
 typedef enum {
-    startup,
-    fixed_update,
-    update
-} ProcessMode;
+    STARTUP,
+    UPDATE,
+    FIXED,
+} SystemType;
 
-typedef struct {
-    u32 size;
-    Map data;
-} ComponentPool;
-
-typedef struct {
-    System system;
-    u32 component_count;
-    ComponentType* components;
-} SystemMask;
-
-struct Registry {
+struct App {
     u32 entity_count;
-    Map component_masks;
-
+    // List<Map<Component>>
+    List entity_components;
     u32 component_count;
-    Map component_pools;
-
-    u32 startup_system_count;
-    Map startup_system_masks;
-
-    u32 update_system_count;
-    Map update_system_masks;
-
-    u32 fixed_system_count;
-    Map fixed_system_masks;
+    // List<System>
+    List startup_systems;
+    // List<System>
+    List update_systems;
+    // List<System>
+    List fixed_systems;
 
     bool running;
     double fixed_delta;
 };
 
-Registry* registry_init(Registry* registry);
+App* app_init(App* app);
 
-void registry_clean(Registry* registry);
+void app_cleanup(App* app);
 
-ComponentType registry_register_component(Registry *registry, u32 size);
+Entity app_add_entity(App* app);
 
-Entity registry_register_entity(Registry *registry);
+ComponentID app_register_component(App* app, u32 component_size);
 
-void registry_register_system(
-        Registry* registry,
-        ProcessMode process_mode,
-        System system,
-        int component_count, 
-        ...
-    );
+void app_set_entity_component(App* app, Entity entity, ComponentID component_id, void* data);
 
-void registry_add_component(
-        Registry* registry,
-        Entity entity,
-        ComponentType component,
-        void* data
-    );
+void* app_get_entity_component(App* app, Entity entity, ComponentID component_id);
 
-void* registry_get_component(
-        Registry* registry,
-        Entity entity,
-        ComponentType component
-    );
+bool app_entity_has_components(App* app, Entity entity, u32 component_count, ComponentID* components);
 
-bool registry_has_components(
-        Registry* registry,
-        Entity entity,
-        u32 num_components,
-        ComponentType* components
-    );
+void app_register_system(App* app, SystemType type, SystemFunction function, u32 component_count, ...);
 
-void registry_startup_systems(Registry* registry);
+void app_execute_systems(App* app, SystemType type, double d);
 
-void registry_update_systems(Registry* registry, double delta);
-
-void registry_fixed_systems(Registry* registry, double percentage);
-
-void registry_set_fixed_delta(Registry* registry, double fixed_delta);
-
-void registry_start(Registry* registry);
-
-void registry_stop(Registry* registry);
+void app_set_fixed_delta(App* app, double fixed_delta);
 
 double current_time_secs(void);
+
+void app_start(App* app);
+
+void app_stop(App* app);
 
 #endif
