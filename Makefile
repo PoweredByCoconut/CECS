@@ -1,6 +1,6 @@
 CC = clang
-CFLAGS = -Iinclude -Wall -Wpedantic
-LDFLAGS = -lm -lncurses
+CFLAGS = -Iinclude -Wall -Wpedantic -g -O0
+LDFLAGS = -lm -lSDL3
 
 SRC = $(shell find src -name *.c)
 OBJ = $(patsubst src/%.c, out/%.o, $(SRC))
@@ -17,6 +17,12 @@ $(TARGET): $(OBJ)
 
 run: $(TARGET)
 	$(TARGET)
+
+test.ppm: $(TARGET)
+	$(TARGET)
+
+open: test.ppm
+	viewnior test.ppm
 
 test: $(TARGET)
 	valgrind --leak-check=full $(TARGET)
