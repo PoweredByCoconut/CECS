@@ -1,5 +1,6 @@
 #include "cecs.h"
 #include "map.h"
+#include "util.h"
 #include <bits/time.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -149,13 +150,6 @@ void app_execute_systems(App* app, SystemType type, double d) {
 
 void app_set_fixed_delta(App* app, double fixed_delta) {
     app->fixed_delta = fixed_delta;
-}
-
-double current_time_secs(void) {
-    struct timeval now;
-    gettimeofday(&now, NULL);
-
-    return now.tv_sec + now.tv_usec / 1000000.0;
 }
 
 void app_start(App* app) {

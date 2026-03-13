@@ -1,5 +1,6 @@
 CC = clang
-CFLAGS = -Iinclude -Wall -Wpedantic -g -O0
+#CFLAGS = -Iinclude -Wall -Wpedantic -g -O0
+CFLAGS = -Iinclude -Wall -Wpedantic -O3
 LDFLAGS = -lm -lSDL3
 
 SRC = $(shell find src -name *.c)
@@ -18,11 +19,12 @@ $(TARGET): $(OBJ)
 run: $(TARGET)
 	$(TARGET)
 
-test.ppm: $(TARGET)
+open: $(TARGET)
 	$(TARGET)
-
-open: test.ppm
 	viewnior test.ppm
 
 test: $(TARGET)
 	valgrind --leak-check=full $(TARGET)
+
+clean: 
+	rm out/*

@@ -58,8 +58,6 @@ void app_execute_systems(App* app, SystemType type, double d);
 
 void app_set_fixed_delta(App* app, double fixed_delta);
 
-double current_time_secs(void);
-
 void app_start(App* app);
 
 void app_stop(App* app);
