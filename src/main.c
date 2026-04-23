@@ -1,96 +1,148 @@
-#include "cecs.h"
-#include <ncurses.h>
+#include <asm-generic/socket.h>
+#include <netinet/in.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 
-ComponentID POSITION_TYPE;
 typedef struct {
-    float x, y;
-} Position;
+    bool success;
+    int socket;
+} Connection;
 
-ComponentID VELOCITY_TYPE;
-typedef Position Velocity;
+typedef struct {
+    bool ok;
+    union {
+        int int_val;
+    };
+} Result;
 
-ComponentID CHARACTER_TYPE;
-typedef char RenderChar;
-
-#define MOVEMENT_COMPONENTS \
-    2, POSITION_TYPE, VELOCITY_TYPE
-void movement_system(App* app, Entity entity, double delta) {
-    Position* position = app_get_entity_component(app, entity, POSITION_TYPE);
-    Velocity* velocity = app_get_entity_component(app, entity, VELOCITY_TYPE);
-
-    position->x += velocity->x * delta;
-    position->y += velocity->y * delta;
-
-    velocity->x = 0.0f;
-    velocity->y = 0.0f;
-}
-
-#define RENDER_COMPONENTS \
-    2, POSITION_TYPE, CHARACTER_TYPE
-void render_system(App* app, Entity entity, double delta) {
-    Position* position = app_get_entity_component(app, entity, POSITION_TYPE);
-    RenderChar character = *(RenderChar*)app_get_entity_component(app, entity, CHARACTER_TYPE);
-
-    clear();
-    mvprintw((int)position->y, (int)position->x, "%c", character);
-    refresh();
-}
-
-#define INPUT_SETUP_COMPONENTS \
-    0
-void input_setup_system(App* app, Entity entity, double _) {
-    initscr();
-    noecho();
-    cbreak();
-    keypad(stdscr, TRUE);
-    nodelay(stdscr, TRUE);
-}
-
-#define INPUT_COMPONENTS \
-    2, VELOCITY_TYPE, CHARACTER_TYPE
-void input_system(App* app, Entity entity, double percentage) {
-    Velocity* velocity = app_get_entity_component(app, entity, VELOCITY_TYPE);
-
-    switch (getch()) {
-        case KEY_UP:
-            velocity->y = -5.0f;
-            break;
-        case KEY_DOWN:
-            velocity->y = 5.0f;
-            break;
-        case KEY_LEFT:
-            velocity->x = -5.0f;
-            break;
-        case KEY_RIGHT:
-            velocity->x = 5.0f;
-            break;
+void unwrap(Result result, const char* message) {
+    if (!result.ok) {
+        fprintf(stderr, "Failed to unwrap result:\n%s\n", message);
+        exit(EXIT_FAILURE);
     }
 }
 
-int main(void) {
-    App* app = app_init(NULL);
+int unwrap_int(Result result, const char* message) {
+    if (!result.ok) {
+        fprintf(stderr, "Failed to unwrap result:\n%s\n", message);
+        exit(EXIT_FAILURE);
+    }
+    return result.int_val;
+}
+
+Result create_socket(void) {
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+
+    return (Result) {
+        .ok = sockfd >= 0,
+        .int_val = sockfd,
+    };
+}
+
+int bind_socket_to_port(int sockfd, unsigned short port) {
+    struct sockaddr_in server_address;
+    server_address.sin_family = AF_INET;
+    server_address.sin_addr.s_addr = INADDR_ANY;
+    server_address.sin_port = htons(port);
+
+    int ret = bind(sockfd, (struct sockaddr*)&server_address, sizeof(server_address));
+    if (ret != 0) {
+        fprintf(stderr, "failed to bind socket\n");
+        perror("bind");
+    }
+
+    return ret;
+}
+
+int try_host(unsigned short port) {
+    int sockfd = unwrap_int(create_socket(), "Failed to create socket");
+
+    if (bind_socket_to_port(sockfd, port) != 0) {
+        close(sockfd);
+        return -1;
+    }
+
+    if (listen(sockfd, 5) != 0){
+        fprintf(stderr, "failed to listen to socket\n");
+        close(sockfd);
+        return -1;
+    }
+
+    printf("hosting\n");
+
+    struct sockaddr_in client_address;
+    socklen_t client_size;
+    int client_socket = accept(sockfd, (struct sockaddr*)&client_address, &client_size);
+
+    printf("accepted with descriptor %d\n", client_socket);
+
+    send(client_socket, "test", 5, 0);
+
+    return sockfd;
+}
+
+int try_connect(unsigned short port) {
+    int sockfd = unwrap_int(create_socket(), "Failed to create socket");
+
+    struct sockaddr_in server_address;
+
+    server_address.sin_family = AF_INET;
+    server_address.sin_port = htons(port);
+
+    inet_pton(AF_INET, "127.0.0.1", &server_address.sin_addr);
     
-    app_set_fixed_delta(app, 0.5);
+    if (connect(sockfd, (struct sockaddr*)&server_address, sizeof(server_address)) != 0) {
+        fprintf(stderr, "Failed to connect to socket\n");
+        perror("connect");
+        close(sockfd);
+        return -1;
+    }
 
-    POSITION_TYPE = app_register_component(app, sizeof(Position));
-    VELOCITY_TYPE = app_register_component(app, sizeof(Velocity));
-    CHARACTER_TYPE = app_register_component(app, sizeof(RenderChar));
+    printf("Connected as client\n");
 
-    app_register_system(app, STARTUP, input_setup_system, INPUT_COMPONENTS);
-    app_register_system(app, UPDATE, input_system, INPUT_COMPONENTS);
-    app_register_system(app, FIXED, render_system, RENDER_COMPONENTS);
-    app_register_system(app, FIXED, movement_system, MOVEMENT_COMPONENTS);
+    char buf[5];
+    recv(sockfd, buf, sizeof(buf), 0);
 
-    Position position = {0.0f, 0.0f};
-    Velocity velocity = {0.0f, 0.0f};
-    RenderChar character = '*';
+    printf("Message received: %.4s\n", buf);
 
-    Entity player = app_add_entity(app);
-    app_set_entity_component(app, player, POSITION_TYPE, &position);
-    app_set_entity_component(app, player, VELOCITY_TYPE, &velocity);
-    app_set_entity_component(app, player, CHARACTER_TYPE, &character);
+    return sockfd;
+}
 
-    app_start(app);
+int host_or_connect(unsigned short port, bool* hosting) {
+    int sockfd = try_host(port);
+    if (sockfd < 0) {
+        sockfd = try_connect(port);
+        *hosting = false;
+    } else {
+        *hosting = true;
+    }
 
-    endwin();
+    return sockfd;
+}
+
+int main(void) {
+    bool hosting;
+
+    int sockfd = host_or_connect(5498, &hosting);
+
+    char buf[128] = {0};
+
+    if (hosting) {
+        scanf("%127s", buf);
+        send(sockfd, buf, sizeof(buf), 0);
+    }
+
+    while (strncmp(buf, "exit", 4) != 0) {
+        recv(sockfd, buf, sizeof(buf), 0);
+        printf("%s\n", buf);
+        scanf("%127s", buf);
+        send(sockfd, buf, sizeof(buf), 0);
+    }
+
+    close(sockfd);
 }

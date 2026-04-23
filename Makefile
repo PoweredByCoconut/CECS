@@ -1,5 +1,5 @@
 CC = clang
-CFLAGS = -Iinclude -Wall -Wpedantic
+CFLAGS = -Iinclude -Wall -Wpedantic -std=c11
 LDFLAGS = -lm -lncurses
 
 SRC = $(shell find src -name *.c)
@@ -20,3 +20,6 @@ run: $(TARGET)
 
 test: $(TARGET)
 	valgrind --leak-check=full $(TARGET)
+
+clean:
+	rm $(OBJ) $(TARGET)
