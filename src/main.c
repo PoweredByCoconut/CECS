@@ -1,5 +1,5 @@
-#include "window.h"
+#include "rasterize.h"
 
 int main(void) {
-    window();
+    rasterize();
 }
