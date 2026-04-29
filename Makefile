@@ -18,6 +18,12 @@ $(TARGET): $(OBJ)
 run: $(TARGET)
 	$(TARGET)
 
+host: $(TARGET)
+	$(TARGET) hoster
+
+client: $(TARGET)
+	$(TARGET) client
+
 test: $(TARGET)
 	valgrind --leak-check=full $(TARGET)
 
