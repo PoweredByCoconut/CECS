@@ -144,13 +144,8 @@ thrd_t broadcast_host(void) {
 
     struct sockaddr_in dest_addr;
     dest_addr.sin_family = AF_INET;
-    dest_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    dest_addr.sin_addr.s_addr = inet_addr("239.0.0.1");
     dest_addr.sin_port = htons(6841);
-
-    struct ip_mreq mreq;
-    mreq.imr_multiaddr.s_addr = inet_addr("239.0.0.1");
-    mreq.imr_interface.s_addr = htonl(INADDR_ANY);
-    setsockopt(broadcastfd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void*)&mreq, sizeof(mreq));
 
     char ttl = 3;
     setsockopt(broadcastfd, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl));
