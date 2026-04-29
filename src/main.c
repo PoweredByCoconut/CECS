@@ -16,6 +16,11 @@
 
 #define MAX_MSG_LENGTH 128
 
+typedef struct {
+    int sockfd;
+    struct sockaddr_in sockaddr;
+} multicast_data;
+
 bool running;
 
 int sender(void* psockfd) {
@@ -59,6 +64,28 @@ int recver(void* psockfd) {
             thrd_sleep(&sleep_time, NULL);
         }
     }
+
+    return 0;
+}
+
+int multicast(void* pdata) {
+    multicast_data data = *(multicast_data*)pdata;
+    const char* message = "I'm a little server";
+    size_t message_length = strlen(message);
+    
+    struct timespec sleep_time = {
+        .tv_sec = 2,
+    };
+
+    running = true;
+
+    while (running) {
+        sendto(data.sockfd, message, message_length, 0, (struct sockaddr*)&data.sockaddr, sizeof(data.sockaddr));
+        thrd_sleep(&sleep_time, NULL);
+    }
+
+    close(data.sockfd);
+    free(pdata);
 
     return 0;
 }
@@ -112,7 +139,7 @@ char get_char_clear(void) {
     return character;
 }
 
-void broadcast_host(void) {
+thrd_t broadcast_host(void) {
     int broadcastfd = socket(AF_INET, SOCK_DGRAM, 0);
 
     struct sockaddr_in dest_addr;
@@ -121,19 +148,20 @@ void broadcast_host(void) {
     dest_addr.sin_port = htons(6841);
 
     struct ip_mreq mreq;
-    mreq.imr_multiaddr.s_addr = inet_addr("224.0.0.1");
+    mreq.imr_multiaddr.s_addr = inet_addr("239.0.0.1");
     mreq.imr_interface.s_addr = htonl(INADDR_ANY);
     setsockopt(broadcastfd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void*)&mreq, sizeof(mreq));
 
-    char ttl = 1;
+    char ttl = 3;
     setsockopt(broadcastfd, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl));
 
-    const char* message = "I'm a little server";
-    size_t message_length = strlen(message);
+    multicast_data* pdata = malloc(sizeof(multicast_data));
+    pdata->sockfd = broadcastfd;
+    pdata->sockaddr = dest_addr;
+    thrd_t broadcast_thread;
+    thrd_create(&broadcast_thread, multicast, pdata);
 
-    sendto(broadcastfd, message, message_length, 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
-
-    close(broadcastfd);
+    return broadcast_thread;
 }
 
 struct in_addr find_host(void) {
@@ -153,7 +181,7 @@ struct in_addr find_host(void) {
     }
 
     struct ip_mreq mreq;
-    mreq.imr_multiaddr.s_addr = inet_addr("224.0.0.1");
+    mreq.imr_multiaddr.s_addr = inet_addr("239.0.0.1");
     mreq.imr_interface.s_addr = htonl(INADDR_ANY);
 
     setsockopt(multifd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
@@ -195,7 +223,7 @@ int main(void) {
     if (host == 'y' || host == 'Y') {
         int sockfd = try_host(4596);
 
-        broadcast_host();
+        thrd_t broadcast_thread = broadcast_host();
 
         struct sockaddr_in client_addr = {0};
         socklen_t client_addr_length = sizeof(client_addr);
@@ -205,6 +233,8 @@ int main(void) {
         printf("accepted connection from %s\n", inet_ntoa(client_addr.sin_addr));
 
         start_comms(clientfd);
+
+        thrd_join(broadcast_thread, NULL);
 
         close(sockfd);
 
