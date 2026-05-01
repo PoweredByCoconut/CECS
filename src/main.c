@@ -113,8 +113,12 @@ int try_connect(struct in_addr host_address, int port) {
 
 int multicast(void* pdata) {
     multicast_data data = *(multicast_data*)pdata;
-    const char* message = "I'm a little server";
-    size_t message_length = strlen(message);
+    size_t message_length = 64;
+    char message[message_length + 1];
+
+    printf("What is the name of the server? ");
+    fgets(message, message_length, stdin);
+    message[strcspn(message, "\n")] = '\0';
     
     struct timespec sleep_time = {
         .tv_sec = 2,
