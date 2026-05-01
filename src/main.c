@@ -24,7 +24,7 @@ typedef struct {
     struct sockaddr_in sockaddr;
 } multicast_data;
 
-bool running;
+bool running, client_connected;
 
 int sender(void* psockfd) {
     int sockfd = *(int*)psockfd;
@@ -124,9 +124,9 @@ int multicast(void* pdata) {
         .tv_sec = 2,
     };
 
-    running = true;
+    client_connected = false;
 
-    while (running) {
+    while (!client_connected) {
         sendto(data.sockfd, message, message_length, 0, (struct sockaddr*)&data.sockaddr, sizeof(data.sockaddr));
         thrd_sleep(&sleep_time, NULL);
     }
@@ -240,6 +240,13 @@ int main(void) {
         memset(&client_addr, 0, sizeof(client_addr));
 
         int clientfd = accept(sockfd, (struct sockaddr*)&client_addr, &client_addr_length);
+
+        if (clientfd < 0) {
+            printf("Failed to accept client\n");
+            close(sockfd);
+            exit(-1);
+        }
+        client_connected = true;
 
         char address[16];
         //printf("accepted connection from %s\n", inet_ntoa(client_addr.sin_addr)); --- OLD
