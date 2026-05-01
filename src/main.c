@@ -72,7 +72,8 @@ int recver(void* psockfd) {
 }
 
 int try_host(int port) {
-    struct sockaddr_in server = {0};
+    struct sockaddr_in server;
+    memset(&server, 0, sizeof(server));
     int server_socket ;
 
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -93,7 +94,8 @@ int try_host(int port) {
 }
 
 int try_connect(struct in_addr host_address, int port) {
-    struct sockaddr_in client = {0};
+    struct sockaddr_in client;
+    memset(&client, 0, sizeof(client));
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
 
     client.sin_family = AF_INET;
@@ -145,17 +147,18 @@ char get_char_clear(void) {
 thrd_t broadcast_host(void) {
     int broadcastfd = socket(AF_INET, SOCK_DGRAM, 0);
 
-    struct sockaddr_in dest_addr;
-    dest_addr.sin_family = AF_INET;
-    dest_addr.sin_addr.s_addr = inet_addr(MULTI_ADDR);
-    dest_addr.sin_port = htons(MULTI_PORT);
+    struct sockaddr_in multicast_addr;
+    memset(&multicast_addr, 0, sizeof(multicast_addr));
+    multicast_addr.sin_family = AF_INET;
+    inet_pton(multicast_addr.sin_family, MULTI_ADDR, &(multicast_addr.sin_addr));
+    multicast_addr.sin_port = htons(MULTI_PORT);
 
     char ttl = 3;
     setsockopt(broadcastfd, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl));
 
     multicast_data* pdata = malloc(sizeof(multicast_data));
     pdata->sockfd = broadcastfd;
-    pdata->sockaddr = dest_addr;
+    pdata->sockaddr = multicast_addr;
     thrd_t broadcast_thread;
     thrd_create(&broadcast_thread, multicast, pdata);
 
@@ -165,11 +168,12 @@ thrd_t broadcast_host(void) {
 struct in_addr find_host(void) {
     int multifd = socket(AF_INET, SOCK_DGRAM, 0);
 
-    struct sockaddr_in host_addr = {0}, in_addr;
+    struct sockaddr_in host_addr, in_addr;
+    memset(&host_addr, 0, sizeof(host_addr));
     socklen_t host_addr_length = sizeof(host_addr);
 
     in_addr.sin_family = AF_INET;
-    in_addr.sin_addr.s_addr = inet_addr(MULTI_ADDR);
+    inet_pton(in_addr.sin_family, MULTI_ADDR, &(in_addr.sin_addr));
     in_addr.sin_port = htons(MULTI_PORT);
 
     if (bind(multifd, (struct sockaddr*)&in_addr, sizeof(in_addr)) < 0) {
@@ -178,11 +182,12 @@ struct in_addr find_host(void) {
         return (struct in_addr) {0};
     }
 
-    struct ip_mreq mreq;
-    mreq.imr_multiaddr.s_addr = inet_addr(MULTI_ADDR);
-    mreq.imr_interface.s_addr = inet_addr(MULTI_ADDR);
+    struct ip_mreqn group;
+    group.imr_multiaddr.s_addr = inet_addr(MULTI_ADDR);
+    group.imr_address.s_addr = INADDR_ANY;
+    group.imr_ifindex = 0;
 
-    setsockopt(multifd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
+    setsockopt(multifd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &group, sizeof(group));
 
     int max_message_length = 128;
     char message[max_message_length + 1];
@@ -193,7 +198,10 @@ struct in_addr find_host(void) {
         ssize_t length = recvfrom(multifd, message, max_message_length, 0, (struct sockaddr*)&host_addr, &host_addr_length);
         message[length] = '\0';
 
-        printf("%s sent: %s\n", inet_ntoa(host_addr.sin_addr), message);
+        char address[16];
+        inet_ntop(host_addr.sin_family, &(host_addr.sin_addr), address, sizeof(address));
+
+        printf("%s sent: %s\n", address, message);
 
         printf("do you want to connect [y/N]? ");
         connect = get_char_clear();
@@ -223,12 +231,16 @@ int main(void) {
 
         thrd_t broadcast_thread = broadcast_host();
 
-        struct sockaddr_in client_addr = {0};
+        struct sockaddr_in client_addr;
         socklen_t client_addr_length = sizeof(client_addr);
+        memset(&client_addr, 0, sizeof(client_addr));
 
         int clientfd = accept(sockfd, (struct sockaddr*)&client_addr, &client_addr_length);
 
-        printf("accepted connection from %s\n", inet_ntoa(client_addr.sin_addr));
+        char address[16];
+        //printf("accepted connection from %s\n", inet_ntoa(client_addr.sin_addr)); --- OLD
+        inet_ntop(client_addr.sin_family, &client_addr.sin_addr, address, client_addr_length);
+        printf("accepted connection from %s\n", address);
 
         start_comms(clientfd);
 
