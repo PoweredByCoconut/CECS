@@ -15,6 +15,9 @@
 #include <netdb.h>
 
 #define MAX_MSG_LENGTH 128
+#define MULTI_ADDR "224.0.2.17"
+#define MULTI_PORT 6841
+#define MESSAGE_PORT 4596
 
 typedef struct {
     int sockfd;
@@ -68,28 +71,6 @@ int recver(void* psockfd) {
     return 0;
 }
 
-int multicast(void* pdata) {
-    multicast_data data = *(multicast_data*)pdata;
-    const char* message = "I'm a little server";
-    size_t message_length = strlen(message);
-    
-    struct timespec sleep_time = {
-        .tv_sec = 2,
-    };
-
-    running = true;
-
-    while (running) {
-        sendto(data.sockfd, message, message_length, 0, (struct sockaddr*)&data.sockaddr, sizeof(data.sockaddr));
-        thrd_sleep(&sleep_time, NULL);
-    }
-
-    close(data.sockfd);
-    free(pdata);
-
-    return 0;
-}
-
 int try_host(int port) {
     struct sockaddr_in server = {0};
     int server_socket ;
@@ -128,6 +109,28 @@ int try_connect(struct in_addr host_address, int port) {
     return server_socket;
 }
 
+int multicast(void* pdata) {
+    multicast_data data = *(multicast_data*)pdata;
+    const char* message = "I'm a little server";
+    size_t message_length = strlen(message);
+    
+    struct timespec sleep_time = {
+        .tv_sec = 2,
+    };
+
+    running = true;
+
+    while (running) {
+        sendto(data.sockfd, message, message_length, 0, (struct sockaddr*)&data.sockaddr, sizeof(data.sockaddr));
+        thrd_sleep(&sleep_time, NULL);
+    }
+
+    close(data.sockfd);
+    free(pdata);
+
+    return 0;
+}
+
 char get_char_clear(void) {
     int character = getchar();
 
@@ -144,8 +147,8 @@ thrd_t broadcast_host(void) {
 
     struct sockaddr_in dest_addr;
     dest_addr.sin_family = AF_INET;
-    dest_addr.sin_addr.s_addr = inet_addr("239.0.0.1");
-    dest_addr.sin_port = htons(6841);
+    dest_addr.sin_addr.s_addr = inet_addr(MULTI_ADDR);
+    dest_addr.sin_port = htons(MULTI_PORT);
 
     char ttl = 3;
     setsockopt(broadcastfd, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl));
@@ -166,8 +169,8 @@ struct in_addr find_host(void) {
     socklen_t host_addr_length = sizeof(host_addr);
 
     in_addr.sin_family = AF_INET;
-    in_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    in_addr.sin_port = htons(6841);
+    in_addr.sin_addr.s_addr = inet_addr(MULTI_ADDR);
+    in_addr.sin_port = htons(MULTI_PORT);
 
     if (bind(multifd, (struct sockaddr*)&in_addr, sizeof(in_addr)) < 0) {
         printf("Error binding socket\n");
@@ -176,8 +179,8 @@ struct in_addr find_host(void) {
     }
 
     struct ip_mreq mreq;
-    mreq.imr_multiaddr.s_addr = inet_addr("239.0.0.1");
-    mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+    mreq.imr_multiaddr.s_addr = inet_addr(MULTI_ADDR);
+    mreq.imr_interface.s_addr = inet_addr(MULTI_ADDR);
 
     setsockopt(multifd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
 
@@ -216,7 +219,7 @@ int main(void) {
     char host = get_char_clear();
 
     if (host == 'y' || host == 'Y') {
-        int sockfd = try_host(4596);
+        int sockfd = try_host(MESSAGE_PORT);
 
         thrd_t broadcast_thread = broadcast_host();
 
@@ -238,7 +241,7 @@ int main(void) {
         printf("looking for hosts\n");
 
         struct in_addr host_address = find_host();
-        int sockfd = try_connect(host_address, 4596);
+        int sockfd = try_connect(host_address, MESSAGE_PORT);
 
         start_comms(sockfd);
 
