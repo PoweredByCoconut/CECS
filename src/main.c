@@ -249,7 +249,6 @@ int main(void) {
         client_connected = true;
 
         char address[16];
-        //printf("accepted connection from %s\n", inet_ntoa(client_addr.sin_addr)); --- OLD
         inet_ntop(client_addr.sin_family, &client_addr.sin_addr, address, client_addr_length);
         printf("accepted connection from %s\n", address);
 
