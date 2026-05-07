@@ -187,3 +187,14 @@ void app_start(App* app) {
 void app_stop(App* app) {
     app->running = false;
 }
+
+char get_char_clear(void) {
+    int character = getchar();
+
+    int temp;
+    if (character != '\n' && character != EOF) {
+        while ((temp = getchar()) != '\n' && temp != EOF);
+    }
+
+    return character;
+}

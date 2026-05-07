@@ -64,4 +64,6 @@ void app_start(App* app);
 
 void app_stop(App* app);
 
+char get_char_clear(void);
+
 #endif
