@@ -1,3 +1,4 @@
+#include <asm-generic/socket.h>
 #define _GNU_SOURCE
 
 #include "client.h"
@@ -20,6 +21,9 @@ typedef struct {
 
 struct in_addr find_host(const char* multi_addr, int multi_port) {
     int multifd = socket(AF_INET, SOCK_DGRAM, 0);
+
+    int optval = 1;
+    setsockopt(multifd, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
 
     struct sockaddr_in host_addr, in_addr;
     memset(&host_addr, 0, sizeof(host_addr));
