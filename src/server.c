@@ -28,7 +28,7 @@ typedef struct {
 
 void start_server(Server *server, int port) {
     server->num_clients = 0;
-    server->max_clients = 2;
+    server->max_clients = 32;
     server->clients = malloc(server->max_clients * sizeof(Client));
 
     printf("What is the name of the server? ");
